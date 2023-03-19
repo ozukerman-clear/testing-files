@@ -1,0 +1,789 @@
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClearMe Authenticator demo</title>
+  <link rel="icon" href="favicon.svg">
+</head>
+
+<body>
+  <main class="page-container">
+    <div class="page-content">
+
+      <div class="clear-header">
+        <img src="https://clear-identity-verifications.cdn.prismic.io/clear-identity-verifications/a53c5f5a-aea1-45f2-a9bf-6b40e64dc43b_clear_logo-large.svg" alt="Clear Logo" width="124">
+      </div>
+
+      
+
+      
+      <div id="clear-button-container"><div class="button-container"><div id="clear-button"></div></div></div>
+      <div id="error-display"></div>
+
+    </div>
+  </main>
+
+  <div id="iframe-container" style="display:none;">
+    <iframe id="iframe-sdk-test" src="" title="SDK Test iFrame">
+    </iframe>
+    <button id="iFrameClose-button" class="btn-secondary btn-sm">
+      X
+    </button>
+  </div>
+
+  <script>
+    let SDK_BTN_VERSION = '5.1.4';
+
+    // Accordion
+    function toggleAccordionSection(id, active) {
+      document.getElementById(`accordion-header-${id}`).classList[active ? 'add' : 'remove']('active');
+      document.getElementById(`accordion-panel-${id}`).classList[active ? 'add' : 'remove']('active');
+    }
+
+    function collapseAccordionSections() {
+      var headers = document.getElementsByClassName('accordion-header');
+      var panels = document.getElementsByClassName('accordion-panel');
+
+      for (var i = 0; i < headers.length; i++) {
+        headers[i].classList.remove('active');
+      }
+
+      for (var j = 0; j < headers.length; j++) {
+        panels[j].classList.remove('active');
+      }
+    }
+
+    // Tools
+    function copyToClipboard(text) {
+      // IE 11 does not support navigator.clipboard, have to use window.clipboardData.setData
+      if (navigator.clipboard) { // Chrome
+        navigator.clipboard.writeText(text);
+      } else if (window.clipboardData) { // IE
+        window.clipboardData.setData('Text', text);
+      }
+    }
+
+    function copyButtonUrl() {
+      const clearSDKUrl = ClearMe.getClearSDKUrl();
+
+      copyToClipboard(clearSDKUrl);
+      console.log('Clear SDK Url:', clearSDKUrl);
+    }
+
+    /**
+     * Create URL to SDK Test App with current configurations
+    */
+    function copySDKTestUrl() {
+      const clearSDKUrl = ClearMe.getClearSDKUrl();
+      const { origin, pathname } = window.location;
+      const clearSDKUrlArr = clearSDKUrl.split('?');
+
+      let SDKTestUrl = `${origin + pathname}?${clearSDKUrlArr[1]}`;
+      SDKTestUrl = SDKTestUrl.replaceAll('+', ' ');
+
+      copyToClipboard(SDKTestUrl);
+      console.log('SDK Test Url:', SDKTestUrl);
+    }
+
+    function logClearSDKConfig() {
+      console.log('Clear SDK Config:', ClearMe.getClearSDKConfig());
+    }
+
+    function toggleIframeContainer(bool) {
+      if (bool) {
+        iFrameSDKTest.setAttribute('src', ClearMe.getClearSDKUrl());
+      } else {
+        iFrameSDKTest.removeAttribute('src');
+      }
+
+      iFrameSDKTestContainer.style.display = bool ? 'block' : 'none';
+    }
+
+    // corresponding parameters for each environment
+    const config = {
+      prod: {
+        sdkBaseUrl: "https://sdk.clearme.com",
+        redirectURI: "https://9msgfgkbsf.execute-api.us-east-1.amazonaws.com/prod/v1/oauth2redirect",
+        orgName: 'test-partner-prod',
+        clientId: '971175bcee2f429a9a004804da7ee0c2',
+        environment: 'production',
+      },
+      dev: {
+        sdkBaseUrl: 'https://sdk.dev.platform.clearme.com',
+        redirectURI: "https://g4k600h04g.execute-api.us-east-1.amazonaws.com/dev/oauth2redirect",
+        orgName: 'test-partner-dev',
+        clientId: '971175bcee2f429a9a004804da7ee0c2',
+        environment: 'development',
+      },
+      pie: {
+        sdkBaseUrl: 'https://sdk.partner.platform.clearme.com',
+        redirectURI: "https://1g8wpo5ekd.execute-api.us-east-1.amazonaws.com/pie/v1/oauth2redirect",
+        orgName: 'test-partner-pie',
+        clientId: '971175bcee2f429a9a004804da7ee0c2',
+        environment: 'integration',
+      },
+      gsaPie: {
+        sdkBaseUrl: 'https://sdk.partner.platform.clearme.com',
+        redirectURI: "https://1g8wpo5ekd.execute-api.us-east-1.amazonaws.com/pie/v1/oauth2redirect",
+        orgName: 'test-gsa-pie',
+        clientId: '971175bcee2f429a9a004804da7ee0c2',
+        environment: 'gsaIntegration',
+      },
+      local: {
+        sdkBaseUrl: '../web-sign-in-with-clear/dist', // assumes that sign-in-with-clear is an adjacent directory
+        redirectURI: "https://g4k600h04g.execute-api.us-east-1.amazonaws.com/dev/oauth2redirect",
+        orgName: 'test-partner-local',
+        clientId: '971175bcee2f429a9a004804da7ee0c2',
+        environment: 'development',
+      }
+    }
+
+    const defaultValues = {
+      allowDesktopAccess: false,
+      registerButtonVisible: true,
+    }
+
+    // grab elements from the DOM
+    const productWebVerify = 'web-verify';
+    const productWebAuthenticator = 'web-authenticator';
+    const clearButtonVersion =  document.getElementById('clear-button-version');
+    const formFields = document.getElementById('form-fields');
+    const formActions = document.getElementById('form-actions');
+    const productDropdown = document.getElementById('product-select');
+    const envDropdown = document.getElementById('environment-select');
+    const useCaseInput = document.getElementById('useCase-input');
+    const authorizationInput = document.getElementById('authorization-input');
+    const clientIdInput = document.getElementById("clientId-input");
+    const redirectUriInput = document.getElementById("redirectURI-input");
+    const stateInput = document.getElementById("state-input");
+    const scopeInput = document.getElementById("scope-input");
+    const allowDesktopAccessInput = document.getElementById("allowDesktopAccess-input");
+    const registerButtonVisibleInput = document.getElementById("registerButtonVisible-input");
+    // BUTTONS & CONTAINERS
+    const iFrameSDKTestContainer = document.getElementById('iframe-container');
+    const iFrameSDKTest = document.getElementById('iframe-sdk-test');
+    const iframeTestButton = document.getElementById('iFrameTest-button');
+    const iframeCloseButton = document.getElementById('iFrameClose-button');
+    const buttonToolsContainer = document.getElementById('clearButtonTools-container');
+    const copyUrlButton = document.getElementById('copyButtonUrl-button');
+    const logConfigButton = document.getElementById('logConfig-button');
+    const copySDKTestUrlButton = document.getElementById('copySDKTestUrl-button');
+    const generateButton = document.getElementById('generate-button');
+    const errorDisplay = document.getElementById('error-display');
+    const clearButtonContainer = document.getElementById("clear-button-container");
+    const webVerifyFields = document.getElementById('web-verify-fields');
+    const webAuthenticatorFields = document.getElementById('web-authenticator-fields');
+    // Branding
+    const variantInput = document.getElementById("variant-select");
+    const sizeInput = document.getElementById("size-select");
+    const textInput = document.getElementById("text-select");
+    const cornerInput = document.getElementById("corner-select");
+
+    // Pre-populate form fields & initialize values
+    const queryParamData = isolateQueryParams(window.location.search)
+
+    // Override version for testing
+    if (queryParamData.version) SDK_BTN_VERSION = queryParamData.version;
+
+    if (queryParamData.product) productDropdown.value = queryParamData.product;
+    if (queryParamData.env) envDropdown.value = queryParamData.env;
+    if (queryParamData.clientId) clientIdInput.value = queryParamData.clientId;
+
+    // Web Verify useCase is the value of clientId and is not exposed for manual entry
+    // Web Authenticator exposes useCase field for user to enter a value
+    if (queryParamData.useCase) useCaseInput.value = queryParamData.product === productWebVerify ? queryParamData.clientId : queryParamData.useCase;
+
+    if (queryParamData.authorization) authorizationInput.value = queryParamData.authorization;
+    if (queryParamData.redirectURI) redirectUriInput.value = decodeURIComponent(queryParamData.redirectURI);
+    if (queryParamData.state) stateInput.value = queryParamData.state;
+    if (queryParamData.scope) scopeInput.value = decodeURIComponent(queryParamData.scope);
+
+    // Experience
+    if (queryParamData.allowDesktopAccess !== undefined) {
+      handleAllowDesktopAccessChange(queryParamData.allowDesktopAccess === 'true');
+    }
+
+    if (queryParamData.registerButtonVisible !== undefined) {
+      handleRegisterButtonVisibleChange(queryParamData.registerButtonVisible === 'true');
+    }
+
+    // Tools
+    copyUrlButton.addEventListener('click', copyButtonUrl);
+    logConfigButton.addEventListener('click', logClearSDKConfig);
+    copySDKTestUrlButton.addEventListener('click', copySDKTestUrl);
+    iframeTestButton.addEventListener('click', function() { toggleIframeContainer(true) });
+    iframeCloseButton.addEventListener('click', function() { toggleIframeContainer(false) });
+    // Button
+    generateButton.addEventListener('click', loadButton);
+    envDropdown.addEventListener('change', removeExistingButton);
+    productDropdown.addEventListener('change', (e) => {
+      const { value } = e.currentTarget;
+
+      handleProductChange(value);
+    })
+    allowDesktopAccessInput.addEventListener('change', (e) => {
+      handleAllowDesktopAccessChange(e.currentTarget.checked);
+    });
+
+    registerButtonVisibleInput.addEventListener('change', (e) => {
+      handleRegisterButtonVisibleChange(e.currentTarget.checked);
+    });
+
+    // Loading behavior
+    onPageLoad();
+
+    // Reset dependent Product fields
+    function resetProductFields() {
+      toggleWebVerifyFeatures(false);
+      toggleWebAuthenticatorFeatures(false);
+    }
+
+    /**
+     * Remove existing button, hide dependent product fields, ex: useCase, state, scope
+     * Show & populate dependent fields based on product value, ex: web-verify, web-authenticator
+     * */
+    function handleProductChange(product) {
+      // Hide/Show Form Fields
+      formFields.style.display = (!product || product === '') ? 'none' : 'block';
+      formActions.style.display = (!product || product === '') ? 'none' : 'flex';
+
+      document.getElementById('currentProduct').innerHTML = product === '' ? '' : `(${productDropdown.value})`;
+
+      removeExistingButton();
+      resetProductFields();
+
+      if (product === productWebVerify) {
+        toggleWebVerifyFeatures(true);
+        populateProductDefaults(product);
+        populateExperienceDefaults(product);
+      } else if (product === productWebAuthenticator) {
+        toggleWebAuthenticatorFeatures(true);
+        populateProductDefaults(product);
+        populateExperienceDefaults(product);
+      }
+    }
+
+    function handleAllowDesktopAccessChange(checked) {
+      allowDesktopAccessInput.value = checked;
+      allowDesktopAccessInput.checked = checked;
+    }
+
+    function handleRegisterButtonVisibleChange(checked) {
+      registerButtonVisibleInput.value = checked;
+      registerButtonVisibleInput.checked = checked;
+    }
+
+    /**
+     * Generate/Show button if loadButton url param is present along with
+     * all necessary URL params
+     * */
+    function onPageLoad () {
+      // Display button version
+      clearButtonVersion.innerHTML = `(v${SDK_BTN_VERSION})`;
+
+      // Auto-load/generate the button
+      if (queryParamData.loadButton === 'true' && generateButton) {
+        populateProductDefaults(productWebVerify);
+        populateExperienceDefaults(productWebVerify)
+        generateButton.click();
+
+        const formContent = document.querySelector(".form-content")
+        formContent.style.display = 'none'
+      }
+
+      // If product was passed in the URL params, invoke project change logic
+      // to show dependent fields and pre-populate fields
+      if (productDropdown.value) {
+        handleProductChange(productDropdown.value);
+      } else {
+        // DEFAULT TO WEB VERIFY
+        productDropdown.value = productWebVerify;
+        handleProductChange(productDropdown.value);
+      }
+
+      toggleAccordionSection('product', true);
+    }
+
+    /**
+     * Populate depended product fields with default
+     * values based on product, ex: web-verify, web-authenticator
+     * */
+    function populateProductDefaults(product) {
+      if (product === productWebVerify) {
+        if (!stateInput.value) stateInput.value = 'test-state-value';
+        if (!scopeInput.value) scopeInput.value = 'email given_name middle_name family_name phone address birthdate urn:clearme:biographics:driver_license';
+      }
+
+      if (product === productWebAuthenticator) {
+        if (!useCaseInput.value) useCaseInput.value = 'verify';
+      }
+    }
+
+    function populateExperienceDefaults(product) {
+      if (product === productWebVerify) {
+        // Allow Desktop Access
+        if (queryParamData.allowDesktopAccess === undefined) {
+          allowDesktopAccessInput.checked = defaultValues.allowDesktopAccess;
+          allowDesktopAccessInput.value = defaultValues.allowDesktopAccess.toString();
+        }
+
+        // Show Register Button
+        if (queryParamData.registerButtonVisible === undefined) {
+          registerButtonVisibleInput.checked = defaultValues.registerButtonVisible;
+          registerButtonVisibleInput.value = defaultValues.registerButtonVisible.toString();
+        }
+      }
+    }
+
+    function toggleWebAuthenticatorFeatures(bool) {
+      webAuthenticatorFields.style.display = bool ? 'block' : 'none';
+    }
+
+    function toggleWebVerifyFeatures(bool) {
+      webVerifyFields.style.display = bool ? 'block' : 'none';
+    }
+
+    function removeExistingButton() {
+      buttonToolsContainer.style.display = 'none';
+      clearButtonContainer.innerHTML = '';
+    }
+
+    function removeExistingScriptTag() {
+      const existingSignInButtonScript = document.getElementById("sign-in-button-script")
+      if (existingSignInButtonScript) existingSignInButtonScript.remove();
+    }
+
+    function loadButton() {
+      const env = envDropdown.value
+      const { sdkBaseUrl } = config[env];
+      const product = productDropdown.value;
+      const authorization = authorizationInput.value;
+      const clientId = clientIdInput.value;
+      const useCase = (product === productWebVerify) ? clientId : useCaseInput.value;
+      const redirectURI = redirectUriInput.value;
+      const state = stateInput.value;
+      const scope = scopeInput.value;
+      // Branding
+      const variant = variantInput.value;
+      const size = sizeInput.value;
+      const text = textInput.value;
+      const corner = cornerInput.value;
+      // Experience
+      const allowDesktopAccess = allowDesktopAccessInput.value;
+      const registerButtonVisible = registerButtonVisibleInput.value;
+
+      collapseAccordionSections();
+
+      removeExistingErrorDisplay();
+      removeExistingButton();
+      removeExistingScriptTag();
+
+      const signInButtonScript = document.createElement('script')
+      signInButtonScript.type = "text/javascript";
+      signInButtonScript.src = `${sdkBaseUrl}/clearme_${SDK_BTN_VERSION}.js`
+      signInButtonScript.id = "sign-in-button-script";
+      signInButtonScript.onload = initButton;
+      document.getElementsByTagName('body')[0].appendChild(signInButtonScript);
+
+      function initButton() {
+        const initObject = config[env];
+
+        initObject.browserVerification = (product === 'web-verify')
+        initObject.authorization = authorization
+        initObject.useCase = useCase;
+
+        if (clientId) initObject.clientId = clientId;
+        if (redirectURI) initObject.redirectURI = redirectURI;
+        if (state) initObject.state = state;
+        if (scope) initObject.scope = scope;
+        // Branding
+        if (variant) initObject.variant = variant;
+        if (size) initObject.size = size;
+        if (text) initObject.text = text;
+        if (corner) initObject.corner = corner;
+
+        // EXPERIENCE
+
+        // Delete the param keys to ensure accurate data when
+        // a user generates a button, changes configs and generates a button again.
+        delete initObject.allowDesktopAccess;
+        delete initObject.registerButtonVisible;
+
+        // Only pass these params when they do NOT match the defaultValues
+        if (allowDesktopAccess !== defaultValues.allowDesktopAccess.toString()) {
+          initObject.allowDesktopAccess = allowDesktopAccess;
+        }
+        if (registerButtonVisible !== defaultValues.registerButtonVisible.toString()) {
+          initObject.registerButtonVisible = registerButtonVisible;
+        }
+        // /EXPERIENCE
+
+        const useCaseDivId = 'clear-button'
+
+        const containerDiv = document.createElement('div')
+        containerDiv.classList.add('button-container')
+
+        const buttonDiv = document.createElement('div')
+        buttonDiv.id = useCaseDivId
+
+        containerDiv.appendChild(buttonDiv)
+        clearButtonContainer.appendChild(containerDiv)
+
+        try {
+          ClearMe.init(useCaseDivId, initObject);
+          buttonToolsContainer.style.display = 'block';
+        } catch (e) {
+          removeExistingButton();
+          console.error("Error in the initButton function: ", e)
+          displayError("Check the console for a specific error")
+        }
+      }
+    }
+
+    function removeExistingErrorDisplay() {
+      errorDisplay.classList.remove('error-display')
+      errorDisplay.innerHTML = ''
+    }
+
+    function displayError(message) {
+      removeExistingErrorDisplay();
+      errorDisplay.textContent = message;
+      errorDisplay.classList.add('error-display')
+    }
+
+    function isolateQueryParams(searchString) {
+      return searchString
+        .slice(1)
+        .split('&')
+        .reduce((obj, paramString) => {
+          const [key, value] = paramString.split('=')
+          obj[key] = value
+          return obj
+        }, {})
+    }
+  </script>
+
+  <!-- Accordion -->
+  <script>
+    var headers = document.getElementsByClassName('accordion-header');
+    var panels = document.getElementsByClassName('accordion-panel')
+
+    for (var i = 0; i < headers.length; i++) {
+      headers[i].addEventListener('click', function() {
+
+
+        var panel = this.nextElementSibling;
+
+        if (!panel.classList.contains('active')) {
+          for (let j = 0; j < panels.length; j++) {
+            headers[j].classList.remove('active');
+            panels[j].classList.remove('active');
+          }
+        }
+
+        this.classList.toggle('active');
+        panel.classList.toggle('active');
+      });
+    }
+  </script>
+  <!-- /Accordion -->
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { background-color: #fbf9f9; margin: 0; padding: 0; }
+    .border-top { border-top: 1px solid #d9dad4; }
+    .border-bottom { border-bottom: 1px solid #d9dad4; }
+    .border { border: 1px solid #d9dad4; }
+    .rounded { border-radius: 5px; }
+    .pb-0 { padding-bottom: 0 !important }
+    .p-0 { padding: 0 !important }
+    .p-3 { padding: 1rem; }
+    .m-3 { margin: 1rem; }
+    .d-none { display: none !important; }
+    .d-block { display: block !important; }
+    .text-danger { color: #d9534f !important }
+    .d-flex { display: flex !important; }
+    .justify-content-around { justify-content: space-around ;}
+
+    #iframe-container {
+      background-color: white;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+    }
+
+    #iframe-container iframe {
+      width: 100%;
+      height: 100%;
+    }
+
+    #iFrameClose-button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+    }
+
+
+    .page-container {
+      display: flex;
+      justify-content: center;
+      margin: 20px;
+    }
+
+    .page-content {
+      background: #FFF;
+      border: 1px solid #e0e0e0;
+      border-radius: 0.25rem;
+      min-width: 370px;
+      max-width: 370px;
+    }
+
+    .clear-header {
+      border-bottom: 1px solid #e0e0e0;
+      padding: 1.25rem 0.75rem 1rem;
+    }
+
+    #clear-button-container {
+      background: #e0e0e0;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .button-container {
+      margin: 2rem 1rem;
+    }
+
+    select, input {
+      border: 1px solid #B4B5B0;
+      border-radius: .25rem;
+      height: 35px;
+      padding: .5rem;
+      width: 100%;
+    }
+
+    .field-small {
+      height: 30px;
+    }
+
+    .btn-secondary {
+      background-color: #ededee;
+      border: 1px solid #b2b0b0;
+      border-radius: 15.5rem;
+      color: #242423;
+      cursor: pointer;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-secondary.btn-sm {
+      font-size: .8rem;
+      padding: 0.5rem .75rem;
+    }
+
+    .btn-secondary.btn-lg {
+      width: 100%;
+      font-size: 1rem;
+      margin: 1rem;
+      padding: 0.75rem 0;
+    }
+
+    .btn-secondary:hover {
+      background-color: #e6e3e3;
+      border: 1px solid #9a9999;
+    }
+
+    #clear-button-version {
+      margin-left: .25rem;
+      color: #626361;
+    }
+
+    .error-display {
+      border: 3px solid red;
+      box-sizing: border-box;
+      color: red;
+      margin-top: 1rem;
+      padding: 10px;
+    }
+
+    .title {
+      color: #242423;
+      font-size: 1rem;
+      font-weight: bolder;
+      margin-bottom: .25rem;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      margin-top: .25rem;
+      margin-bottom: .5rem
+    }
+
+    .form-field-container {
+      padding: 1rem;
+    }
+
+    .help-text {
+      color: #363636;
+      font-size: smaller;
+      margin-top: .25rem;
+    }
+
+    #form-actions {
+      align-items: center;
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+
+  <!-- Accordion -->
+  <style>
+    .accordion-header {
+      background-color: #fff;
+      border: none;
+      border-bottom: 1px solid #cccccc;
+      display: flex;
+      justify-content: space-between;
+      color: #444;
+      cursor: pointer;
+      padding: 18px;
+      width: 100%;
+
+      text-align: left;
+      outline: none;
+      font-size: 15px;
+      transition: 0.4s;
+    }
+
+    .icon-chevron-right {
+      display: block;
+    }
+
+    .icon-chevron-down {
+      display: none;
+    }
+
+    .accordion-header span:first-child {
+      font-weight: bold;
+    }
+
+    .accordion-header.active {
+      background-color: #232422;
+      color: white;
+    }
+
+    .accordion-header.active .icon-chevron-down {
+      display: block;
+    }
+
+    .accordion-header.active .icon-chevron-right {
+      display: none
+    }
+
+    .accordion-header:not(.active):hover {
+      background-color: #eee;
+    }
+
+    .accordion-header-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .accordion-header-label svg {
+      height: 20px;
+      margin-right: .35rem;
+    }
+
+    .accordion-panel {
+      display: none;
+      box-shadow: 0px 4px 6px rgb(0 0 0 / 10%) inset;
+      background: #f8f8f8;
+      overflow: hidden;
+    }
+
+    .accordion-panel.active {
+      display: block;
+      border-bottom: 1px solid #cccccc;
+    }
+  </style>
+  <!-- /Accordion -->
+
+  <!-- Switch -->
+  <style>
+    /* *,
+    *:before,
+    *:after {
+      box-sizing: border-box;
+    } */
+
+    .toggle-container {
+      background: white;
+      padding: 10px;
+      width: 100%;
+      border: 1px solid #B4B5B0;
+      border-radius: 0.25rem;
+    }
+
+    .toggle {
+      cursor: pointer;
+      display: inline-block;
+    }
+
+    .toggle-switch {
+      display: inline-block;
+      background: #ccc;
+      border-radius: 16px;
+      width: 53px;
+      height: 27px;
+      position: relative;
+      vertical-align: middle;
+      transition: background 0.25s;
+    }
+    .toggle-switch:before, .toggle-switch:after {
+      content: "";
+    }
+    .toggle-switch:before {
+      display: block;
+      background: linear-gradient(to bottom, #fff 0%, #eee 100%);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+      width: 19px;
+      height: 19px;
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      transition: left 0.25s;
+    }
+    .toggle:hover .toggle-switch:before {
+      background: linear-gradient(to bottom, #fff 0%, #fff 100%);
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+    }
+    .toggle-checkbox:checked + .toggle-switch {
+      background: #56c080;
+    }
+    .toggle-checkbox:checked + .toggle-switch:before {
+      left: 30px;
+    }
+
+    .toggle-checkbox {
+      position: absolute;
+      visibility: hidden;
+    }
+
+    .toggle-label {
+      margin-left: 5px;
+      position: relative;
+      top: 2px;
+    }
+  </style>
+  <!-- /Switch -->
+
+
+
+<script type="text/javascript" src="https://sdk.partner.platform.clearme.com/clearme_5.1.4.js" id="sign-in-button-script"></script></body></html>
